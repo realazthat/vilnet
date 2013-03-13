@@ -4,19 +4,18 @@ import shlex
 import random
 
 
-
 class Command:
     def __init__(self,bot):
         self.bot = bot
     
     def run(self,cmd,args,variables):
-		raise Exception('Implement this')
+        raise Exception('Implement this')
 
     def name(self):
-		raise Exception('Implement this')
+        raise Exception('Implement this')
     
     def usage(self):
-		raise Exception('Implement this')
+        raise Exception('Implement this')
 
 class TimeCommand(Command):
     
@@ -32,6 +31,28 @@ class TimeCommand(Command):
     
     def usage(self):
         return '!time    Gives the time, in Jerusalem'
+
+class TellCommand(Command):
+    
+    def run(self,cmd,args,variables):
+        
+        if not len(args) == 2:
+            self.bot.msg(variables['response_channel'], variables['response_prefix'] + '!tell usage> ' + self.usage())
+            return
+        
+        nick = args[0]
+        message = args[1]
+        
+        if nick.lower() = self.bot.nickname.lower():
+            self.bot.msg(variables['response_channel'], variables['response_prefix'] + 'Wow, a sense of humor')
+			
+        self.bot.msg(variables['channel'], '{nick}: {message}'.format(nick=args[0],message=args[1]))
+        
+    def name(self):
+        return '!tell'
+    
+    def usage(self):
+        return '!tell <nick> <message>    Gives over <message> to user specified by <nick>'
 
 
 
@@ -49,6 +70,7 @@ class Bot(irc.IRCClient):
         self.command_modules = {}
         
         self.command_modules['time']=TimeCommand(self)
+        self.command_modules['tell']=TellCommand(self)
         
         
         
@@ -108,7 +130,7 @@ class Bot(irc.IRCClient):
             print channel+'>',user+':',msg
             user_nick,_,_ = user.partition('!')
             
-            variables = {'nick':self.nickname,'user_nick':user_nick,'response_channel':channel}
+            variables = {'nick':self.nickname,'user_nick':user_nick,'response_channel':channel,'channel':channel}
             variables['response_prefix'] = user_nick + ': '
             
             """
@@ -159,7 +181,7 @@ class Bot(irc.IRCClient):
             
             
             if full_cmd not in d:
-                self.msg(channel, 'Odd, I thought I heard something.'.format(**variables))
+                self.msg(variables['response_channel'], 'Odd, I thought I heard something.'.format(**variables))
                 return
             
             self.msg(channel, d[full_cmd].format(**variables))
@@ -195,9 +217,24 @@ from twisted.internet import reactor
 
 
 def main():
+    import yaml
+
+    config_file = open('config.json')
+
+    config = None
+
+    try:
+        config = yaml.load(config_file)
+    except:
+        print
+        print "ERROR: parsing configuration"
+        print
+        
+        raise
+
+    reactor.connectTCP(config['server_host'], config['server_port'], BotFactory(config['channel'],config['nick']))
     
-    #reactor.connectTCP('irc.synirc.net', 6667, BotFactory('#reddit-judaism','Moses'))
-    reactor.connectTCP('irc.freenode.net', 6667, BotFactory('#reddit-judaism','Moses'))
+    #reactor.connectTCP('irc.freenode.net', 6667, BotFactory('#reddit-judaism','Moses'))
     
     reactor.run()
 
