@@ -8,11 +8,15 @@ import random
 class Command:
     def __init__(self,bot):
         self.bot = bot
-        pass
     
     def run(self,cmd,args,variables):
-        pass
+		raise Exception('Implement this')
 
+    def name(self):
+		raise Exception('Implement this')
+    
+    def usage(self):
+		raise Exception('Implement this')
 
 class TimeCommand(Command):
     
