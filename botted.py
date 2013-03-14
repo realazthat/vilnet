@@ -32,6 +32,19 @@ class TimeCommand(Command):
     def usage(self):
         return '!time    Gives the time, in Jerusalem'
 
+class HelpCommand(Command):
+    
+    def run(self,cmd,args,variables):
+        
+        
+        self.bot.print_usage(variables,wrong_usage=False)
+
+    def name(self):
+        return '!help'
+    
+    def usage(self):
+        return '!help    You have to know what this does'
+
 class TellCommand(Command):
     
     def run(self,cmd,args,variables):
@@ -43,16 +56,17 @@ class TellCommand(Command):
         nick = args[0]
         message = args[1]
         
-        if nick.lower() = self.bot.nickname.lower():
+        if nick.lower() == self.bot.nickname.lower():
             self.bot.msg(variables['response_channel'], variables['response_prefix'] + 'Wow, a sense of humor')
-			
-        self.bot.msg(variables['channel'], '{nick}: {message}'.format(nick=args[0],message=args[1]))
+            return
+            
+        self.bot.msg(self.bot.factory.channel, '{nick}: {message}'.format(nick=args[0],message=args[1]))
         
     def name(self):
         return '!tell'
     
     def usage(self):
-        return '!tell <nick> <message>    Gives over <message> to user specified by <nick>'
+        return '!tell    <nick> <message>    Gives over <message> to user specified by <nick>'
 
 
 
@@ -71,6 +85,7 @@ class Bot(irc.IRCClient):
         
         self.command_modules['time']=TimeCommand(self)
         self.command_modules['tell']=TellCommand(self)
+        self.command_modules['help']=HelpCommand(self)
         
         
         
@@ -81,7 +96,7 @@ class Bot(irc.IRCClient):
         pass
 
 
-    def print_usage(self,variables):
+    def print_usage(self,variables,wrong_usage=False):
         
         
         usage = ''
@@ -96,13 +111,16 @@ class Bot(irc.IRCClient):
         
         usage += '\n\n' + 'Available commands: ' + ' '.join(cmds)
         usage += '\n\n' + 'Usage: \n  ' + '\n  '.join(usage_list) + '\n\n'
-        
-        
+
+
         self.msg(variables['user_nick'],usage)
-        
+
         if variables['in_channel']:
-            self.msg(variables['response_channel'], variables['response_prefix'] + 'umm ... wrong usage ... I pm\'d you proper usage!')
-        
+            if wrong_usage:
+                self.msg(variables['response_channel'], variables['response_prefix'] + 'umm ... wrong usage ... I pm\'d you proper usage!')
+            else:
+                self.msg(variables['response_channel'], variables['response_prefix'] + 'I pm\'d you the proper usage.')
+
 
     def run_command(self,full_cmd,variables):
 
@@ -112,7 +130,7 @@ class Bot(irc.IRCClient):
         
         
         if cmd not in self.command_modules:
-            self.print_usage(variables)
+            self.print_usage(variables,True)
             return
         
         self.command_modules[cmd].run(cmd,args,variables)
@@ -148,10 +166,18 @@ class Bot(irc.IRCClient):
             
             #if this is a pm
             if channel == self.nickname:
+                
+                
                 variables['response_channel'] = user_nick
                 variables['response_prefix'] = ''
                 variables['in_channel'] = False
                 full_cmd = msg
+                
+                
+                if msg.startswith(self.nickname + ":"):
+                    self.msg(variables['response_channel'], variables['response_prefix']+ 'This is a PM, Don\'t prefix your commands with "{botnick}:".'.format(botnick=self.nickname))
+                    return
+                
             elif msg.startswith(self.nickname + ":"):
                 full_cmd = msg[ len(self.nickname + ":"): ].strip()
                 
