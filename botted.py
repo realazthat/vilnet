@@ -4,6 +4,7 @@ import shlex
 import random
 
 
+
 class Command:
     def __init__(self,bot):
         self.bot = bot
@@ -66,9 +67,42 @@ class TellCommand(Command):
         return '!tell'
     
     def usage(self):
-        return '!tell    <nick> <message>    Gives over <message> to user specified by <nick>'
+        return '!tell <nick> <message>\n        Gives over <message> to user specified by <nick>'
 
+class LastSubRedditPostCommand(Command):
+    
+    def run(self,cmd,args,variables):
+        if not len(args) == 0:
+            self.bot.msg(variables['response_channel'], variables['response_prefix'] + '!last usage> ' + self.usage())
+            return
+        
+        
+        reddit_querier = self.bot.factory.main_context['reddit_querier']
+        config = self.bot.factory.main_context['config']
+        
+        client = reddit_querier.session
+        
+        parameters = {'limit':1}
+        url = r'http://www.reddit.com/r/{sr}/{top}.json'.format(sr=config['subreddit'],top='new')
+        r = client.get(url,params=parameters)
+        
+        import json
+        j = json.loads(r.text)
+        
+        if j['kind'] != 'Listing':
+            print "j['kind']:",j['kind']
+            return
+        
+        title = j['data']['children'][0]['data']['title'].encode('utf-8')
+        
+        
+        self.bot.msg(self.bot.factory.channel, 'LAST POST: {title}'.format(title=title))
 
+    def name(self):
+        return '!last'
+    
+    def usage(self):
+        return '!last    Displays the last post on the subreddit'
 
 class Bot(irc.IRCClient):
     def _get_nickname(self):
@@ -86,6 +120,7 @@ class Bot(irc.IRCClient):
         self.command_modules['time']=TimeCommand(self)
         self.command_modules['tell']=TellCommand(self)
         self.command_modules['help']=HelpCommand(self)
+        self.command_modules['last']=LastSubRedditPostCommand(self)
         
         
         
@@ -133,9 +168,13 @@ class Bot(irc.IRCClient):
             self.print_usage(variables,True)
             return
         
-        self.command_modules[cmd].run(cmd,args,variables)
-        
-        
+        try:
+            self.command_modules[cmd].run(cmd,args,variables)
+        except Exception as e:
+            print e
+            
+            self.msg(variables['response_channel'], variables['response_prefix'] + 'Error running command, see bot logs')
+            raise
         
     def privmsg(self, user, channel, msg):
 
@@ -225,10 +264,17 @@ class Bot(irc.IRCClient):
 
 class BotFactory(protocol.ClientFactory):
     protocol = Bot
+    
+    def buildProtocol(self, addr):
+        bot = protocol.ClientFactory.buildProtocol(self,addr)
+        self.bots.append(bot)
+        return bot
 
-    def __init__(self, channel, nickname):
+    def __init__(self, channel, nickname,main_context):
         self.channel = channel
         self.nickname = nickname
+        self.bots = []
+        self.main_context = main_context
 
     def clientConnectionLost(self, connector, reason):
         print "Lost connection (%s), reconnecting." % (reason,)
@@ -241,11 +287,78 @@ import sys
 from twisted.internet import reactor
 
 
+class RedditService:
+    def __init__(self,bot_factory,subreddit):
+        self.bot_factory = bot_factory
+        self.before = None
+        self.subreddit = subreddit
+    
+    def run(self):
+        
+        
+        import requests
+        import json
+        from pprint import pprint
+        
+        
+        client = requests.session()
+        
+        try:
+            parameters={'limit':1}
+            
+            if self.before != None:
+                parameters['before'] = self.before
+                parameters['limit'] = 3
+            
+            
+            url = r'http://www.reddit.com/r/{sr}/{top}.json'.format(sr=self.subreddit,top='new')
+            r = client.get(url,params=parameters)
+            #print 'sent URL is', r.url
+            #j = r.json
+            j = json.loads(r.text)
+            #pprint(j)
+            
+            if j['kind'] != 'Listing':
+                print "j['kind']:",j['kind']
+                return
+            
+            def set_before():
+                if len(j['data']['children']) != 0:
+                    first_post_kind = j['data']['children'][0]['kind']
+                    first_post_id = j['data']['children'][0]['data']['id']
+                
+                    self.before = '{kind}_{post_id}'.format(kind=first_post_kind,post_id=first_post_id)
+            
+            if self.before == None:
+                set_before()
+                return
+            
+            set_before()
+            
+            for jpost in  j['data']['children']:
+                
+                for bot in self.bot_factory.bots:
+                    bot.msg(bot.factory.channel, 'NEW POST: {title}'.format(title=jpost['data']['title']))
+            
+            
+        finally:
+            client.close()
+
+
+class RedditQuerier:
+    def __init__(self):
+        import requests
+        self._session = requests.session()
+    
+    def _get_session(self):
+        return self._session
+    
+    session = property(_get_session)
 
 def main():
     import yaml
 
-    config_file = open('config.json')
+    config_file = open('config.yml')
 
     config = None
 
@@ -258,9 +371,34 @@ def main():
         
         raise
 
-    reactor.connectTCP(config['server_host'], config['server_port'], BotFactory(config['channel'],config['nick']))
+    main_context = {}
+    
+    main_context['reddit_querier'] = RedditQuerier()
+    main_context['config'] = config
+    
+    bot_factory = BotFactory(config['channel'],config['nick'],main_context)
+
+    reactor.connectTCP(config['server_host'], config['server_port'], bot_factory)
     
     #reactor.connectTCP('irc.freenode.net', 6667, BotFactory('#reddit-judaism','Moses'))
+    
+    
+    services = [RedditService(bot_factory,config['subreddit'])]
+    
+    def run_services():
+        for service in services:
+            
+            try:
+                service.run()
+            except Exception as e:
+                # TODO, log exception, and pass
+                raise
+        
+    
+    from twisted.internet.task import LoopingCall
+    lc2 = LoopingCall(run_services)
+    
+    lc2.start(10)
     
     reactor.run()
 
