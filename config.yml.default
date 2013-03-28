@@ -2,3 +2,4 @@ server_host: irc.synirc.net
 server_port: 6667
 channel: '#reddit-judaism'
 nick: Moses
+subreddit: Judaism

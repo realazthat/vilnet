@@ -2,21 +2,30 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol
 import shlex
 import random
+from command_modules.command import Command
 
 
-
-class Command:
-    def __init__(self,bot):
-        self.bot = bot
+def shorten_url(long_url):
+    import requests
+    import json
+    from pprint import pprint
     
-    def run(self,cmd,args,variables):
-        raise Exception('Implement this')
-
-    def name(self):
-        raise Exception('Implement this')
+    parameters = {"longUrl": long_url}
     
-    def usage(self):
-        raise Exception('Implement this')
+    
+    
+    headers = {'Content-Type':'application/json'}
+    api_url = 'https://www.googleapis.com/urlshortener/v1/url'
+    r = requests.post(api_url,data=json.dumps(parameters),headers=headers)
+    
+    
+    j = json.loads(r.text)
+    
+    if 'id' not in j or 'longUrl' not in j or j['longUrl'] != long_url:
+        return long_url
+    
+    return j['id']
+    
 
 class TimeCommand(Command):
     
@@ -67,7 +76,7 @@ class TellCommand(Command):
         return '!tell'
     
     def usage(self):
-        return '!tell <nick> <message>\n        Gives over <message> to user specified by <nick>'
+        return '!tell <nick> <message>\n           Gives over <message> to user specified by <nick>'
 
 class LastSubRedditPostCommand(Command):
     
@@ -93,16 +102,30 @@ class LastSubRedditPostCommand(Command):
             print "j['kind']:",j['kind']
             return
         
-        title = j['data']['children'][0]['data']['title'].encode('utf-8')
+        if len(j['data']['children']) == 0:
+            raise Exception('Reddit API returned 0 posts for !last')
+        
+        jpost = j['data']['children'][0]
         
         
-        self.bot.msg(self.bot.factory.channel, 'LAST POST: {title}'.format(title=title))
+        
+        url = 'http://www.reddit.com/{permalink}'.format(permalink=jpost['data']['permalink'])
+        
+        url = shorten_url(url).encode('utf-8')
+                
+        title = jpost['data']['title'].encode('utf-8')
+        
+        print 'url:',url
+        print 'title:',title
+        self.bot.msg(self.bot.factory.channel, 'LAST POST: "{title}" ({url})'.format(title=title,url=url))
 
     def name(self):
         return '!last'
     
     def usage(self):
         return '!last    Displays the last post on the subreddit'
+
+
 
 class Bot(irc.IRCClient):
     def _get_nickname(self):
@@ -257,6 +280,15 @@ class Bot(irc.IRCClient):
 
             pass
         except Exception as e:
+            import sys, traceback
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print "*** print_tb:"
+            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+            print "*** print_exception:"
+            traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                      limit=2, file=sys.stdout)
+
+            
             print 'Exception:',e
 
 
@@ -335,10 +367,19 @@ class RedditService:
             
             set_before()
             
+            
             for jpost in  j['data']['children']:
                 
+                
+                url = 'http://www.reddit.com/{permalink}'.format(permalink=jpost['data']['permalink'])
+                url = shorten_url(url)
+                
+                title = jpost['data']['title']
+                
                 for bot in self.bot_factory.bots:
-                    bot.msg(bot.factory.channel, 'NEW POST: {title}'.format(title=jpost['data']['title']))
+                    
+                    
+                    bot.msg(bot.factory.channel, 'NEW POST: "{title}" ({url})'.format(title=title,url=url))
             
             
         finally:
@@ -380,10 +421,11 @@ def main():
 
     reactor.connectTCP(config['server_host'], config['server_port'], bot_factory)
     
-    #reactor.connectTCP('irc.freenode.net', 6667, BotFactory('#reddit-judaism','Moses'))
     
     
-    services = [RedditService(bot_factory,config['subreddit'])]
+    services = [
+        RedditService(bot_factory,config['subreddit'])
+        ]
     
     def run_services():
         for service in services:
@@ -391,8 +433,15 @@ def main():
             try:
                 service.run()
             except Exception as e:
-                # TODO, log exception, and pass
-                raise
+                import sys, traceback
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                print "*** print_tb:"
+                traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+                print "*** print_exception:"
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                          limit=2, file=sys.stdout)
+
+                pass
         
     
     from twisted.internet.task import LoopingCall
