@@ -3,7 +3,7 @@ from twisted.internet import protocol
 import shlex
 import random
 from command_modules.command import Command
-
+import upsidedown
 
 def shorten_url(long_url):
     import requests
@@ -115,9 +115,11 @@ class LastSubRedditPostCommand(Command):
                 
         title = jpost['data']['title'].encode('utf-8')
         
+        author = jpost['data']['author'].encode('utf-8')
+        
         print 'url:',url
         print 'title:',title
-        self.bot.msg(self.bot.factory.channel, 'LAST POST: "{title}" ({url})'.format(title=title,url=url))
+        self.bot.msg(self.bot.factory.channel, 'LAST POST: "{title}" ({url}) by {author}'.format(author=author,title=title,url=url))
 
     def name(self):
         return '!last'
@@ -146,7 +148,9 @@ class Bot(irc.IRCClient):
         self.command_modules['last']=LastSubRedditPostCommand(self)
         
         
-        
+        for command_module in command_modules:
+            command_module.config = self.config
+            command_module.main_context = self.main_context
         
 
     def joined(self, channel):
@@ -246,10 +250,16 @@ class Bot(irc.IRCClient):
             else:
                 if msg.lower().find("sholom") != -1:
                 
-                    dweed_exasperated_msgs = ['Oh Dweed ...', 'JeNug SHoiN!',]
+                    dweed_exasperated_msgs = ['Oh Dweed ...', 'JeNug SHoiN!','Oy. Do you even lift??!', 'Come at me bro', 'Ain\'t nobody got time for that.']
                     self.msg(channel, dweed_exasperated_msgs[random.randint(0,len(dweed_exasperated_msgs)-1)])
                     
                     return
+                
+                if msg.find("sS") != -1 or msg.find("hH") != -1:
+                    self.msg(channel, upsidedown.transform(msg).encode('utf-8'))
+                    
+                    return
+                
                 return
             
             
@@ -372,14 +382,15 @@ class RedditService:
                 
                 
                 url = 'http://www.reddit.com/{permalink}'.format(permalink=jpost['data']['permalink'])
-                url = shorten_url(url)
+                url = shorten_url(url).encode('utf-8')
                 
-                title = jpost['data']['title']
+                title = jpost['data']['title'].encode('utf-8')
+                author = jpost['data']['author'].encode('utf-8')
                 
                 for bot in self.bot_factory.bots:
                     
                     
-                    bot.msg(bot.factory.channel, 'NEW POST: "{title}" ({url})'.format(title=title,url=url))
+                    bot.msg(bot.factory.channel, 'NEW POST: "{title}" ({url}) by {author}'.format(author=author,title=title,url=url))
             
             
         finally:
@@ -412,8 +423,16 @@ def main():
         
         raise
 
+    
+
+
+    import sqlite3
+    
+    #db_conn = sqlite3.connect(config['db_path'])
+
     main_context = {}
     
+    #main_context['db_conn'] = db_conn
     main_context['reddit_querier'] = RedditQuerier()
     main_context['config'] = config
     
