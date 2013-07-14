@@ -277,7 +277,7 @@ class TimeCommand(Command):
     
     def run(self,cmd,args,variables):
         
-        t= strftime("%a, %d %b %Y %H:%M:%S", gmtime(time()+3600*2) )
+        t= strftime("%a, %d %b %Y %H:%M:%S", gmtime(time.time()+3600*2) )
         
         self.bot.msg(variables['response_channel'], 'Time is now {time}'.format(time=t))
 
