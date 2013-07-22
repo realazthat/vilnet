@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 from twisted.words.protocols import irc
 from twisted.internet import protocol
@@ -377,10 +378,7 @@ class LastSubRedditPostCommand(Command):
         #print "jpost['data']:"
         #pprint.pprint(jpost['data'])
         
-        permalink = 'http://www.reddit.com/{permalink}'.format(permalink=jpost['data']['permalink'].encode('utf-8'))
-        
-        
-        permalink = shorten_url(unescape_entities(permalink)).encode('utf-8')
+        permalink = unescape_entities('http://redd.it/'+jpost['data']['id']).encode('utf-8')
         domain = unescape_entities(jpost['data']['domain']).encode('utf-8')
         url = unescape_entities(jpost['data']['url']).encode('utf-8')
                                 
@@ -963,10 +961,8 @@ class RedditService:
             for jpost in  j['data']['children']:
                 
                 
-                permalink = 'http://www.reddit.com/{permalink}'.format(permalink=jpost['data']['permalink'].encode('utf-8'))
                 
-                
-                permalink = shorten_url(unescape_entities(permalink)).encode('utf-8')
+                permalink = unescape_entities('http://redd.it/'+jpost['data']['id']).encode('utf-8')
                 domain = unescape_entities(jpost['data']['domain']).encode('utf-8')
                 url = unescape_entities(jpost['data']['url'].encode('utf-8'))
                 
